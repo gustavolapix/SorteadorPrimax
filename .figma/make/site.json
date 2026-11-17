@@ -1,0 +1,11 @@
+{
+  "title": "Sorteador primax",
+  "description": "Ayuda a los usuarios a acceder a información y servicios de Primax mediante una experiencia web clara y sencilla.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
