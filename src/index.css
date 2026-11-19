@@ -1,11 +1,4 @@
-@import "tailwindcss";
 
-@font-face {
-  font-family: "CIBFont Sans:Bold";
-  src: url("/fonts/CIBFont_Sans-Bold.woff2") format("woff2");
-  font-style: normal;
-  font-weight: 700;
-}
 
 @font-face {
   font-family: "Clash Grotesk:Bold";
@@ -70,7 +63,8 @@ button {
   position: relative;
   display: grid;
   min-height: 100dvh;
-  overflow: hidden;
+  overflow-x: clip;
+  overflow-y: auto;
   isolation: isolate;
 }
 
@@ -229,7 +223,8 @@ button {
   min-width: 0;
   height: 95px;
   padding: 13px 20px;
-  overflow: hidden;
+  overflow-x: clip;
+  overflow-y: auto;
   border: 2.2px solid white;
   border-radius: 20px;
   background: rgba(255, 255, 255, 0.1);
@@ -250,7 +245,8 @@ button {
 .person-name {
   width: 100%;
   margin: 0 0 6px;
-  overflow: hidden;
+  overflow-x: clip;
+  overflow-y: auto;
   font-family: "Clash Grotesk:Semibold", sans-serif;
   font-size: 20px;
   font-weight: 600;
@@ -274,7 +270,7 @@ button {
   display: flex;
   align-items: center;
   gap: 5px;
-  white-space: nowrap;
+  flex-wrap: wrap;
 }
 
 .person-details img {

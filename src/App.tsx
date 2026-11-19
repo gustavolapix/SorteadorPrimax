@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 type Person = {
@@ -52,18 +53,21 @@ const locations = [
   "Santa Marta, Magdalena",
 ];
 
-const pool: Person[] = names.map((name, index) => ({
+const defaultPool: Person[] = names.map((name, index) => ({
   name,
   location: locations[index % locations.length],
   document: `XXXXXX${String(1047 + index * 317).slice(-4)}`,
 }));
 
+const storedPool = localStorage.getItem("customPool");
+const pool: Person[] = storedPool ? JSON.parse(storedPool) : defaultPool;
+
 const ROUND_WINNER_COUNTS = [6, 6, 3];
 const TOTAL_WINNERS = ROUND_WINNER_COUNTS.reduce((total, count) => total + count, 0);
 
-const randomPerson = (excluded: Set<string> = new Set()) => {
-  const available = pool.filter((person) => !excluded.has(person.name));
-  return available[Math.floor(Math.random() * available.length)] ?? pool[0];
+const randomPerson = (excludedDocuments: Set<string> = new Set()) => {
+  const available = pool.filter((person) => !excludedDocuments.has(person.document));
+  return available[Math.floor((crypto.getRandomValues(new Uint32Array(1))[0] / 2**32) * available.length)] ?? pool[0];
 };
 
 function FooterStrips() {
@@ -127,60 +131,111 @@ function PageFrame({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
-  const [view, setView] = useState<"intro" | "draw" | "final">("intro");
-  const [round, setRound] = useState(1);
-  const [roundWinners, setRoundWinners] = useState<Person[]>([]);
-  const [allWinners, setAllWinners] = useState<Person[]>([]);
-  const [rolling, setRolling] = useState<Person[]>(() =>
-    Array.from({ length: ROUND_WINNER_COUNTS[0] }, () => randomPerson()),
-  );
+const [view, setView] = useState<"intro" | "draw" | "final">(() => (localStorage.getItem("view") as "intro" | "draw" | "final") || "intro");
+const [round, setRound] = useState(() => parseInt(localStorage.getItem("round") || "1", 10));
+const [roundWinners, setRoundWinners] = useState<Person[]>(() => JSON.parse(localStorage.getItem("roundWinners") || "[]"));
+const [allWinners, setAllWinners] = useState<Person[]>(() => JSON.parse(localStorage.getItem("allWinners") || "[]"));
+
+useEffect(() => {
+  localStorage.setItem("view", view);
+  localStorage.setItem("round", round.toString());
+  localStorage.setItem("roundWinners", JSON.stringify(roundWinners));
+  localStorage.setItem("allWinners", JSON.stringify(allWinners));
+}, [view, round, roundWinners, allWinners]);
+
+const resetDraw = () => {
+  if (!window.confirm("¿Seguro que deseas reiniciar el sorteo? Se perderán todos los ganadores actuales.")) return;
+  localStorage.clear();
+  setView("intro");
+  setRound(1);
+  setRoundWinners([]);
+  setAllWinners([]);
+};
+
+const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const data = JSON.parse(e.target?.result as string) as Person[];
+      if (Array.isArray(data) && data.length >= TOTAL_WINNERS) {
+        localStorage.setItem("customPool", JSON.stringify(data));
+        window.location.reload();
+      } else {
+        alert(`El archivo debe ser un JSON con al menos ${TOTAL_WINNERS} participantes válidos.`);
+      }
+    } catch {
+      alert("Error al procesar el archivo JSON.");
+    }
+  };
+  reader.readAsText(file);
+};
   const winnersThisRound = ROUND_WINNER_COUNTS[round - 1];
 
-  const excludedNames = useMemo(
-    () => new Set(allWinners.map((winner) => winner.name)),
+  const excludedDocuments = useMemo(
+    () => new Set(allWinners.map((winner) => winner.document)),
     [allWinners],
   );
 
-  useEffect(() => {
+useEffect(() => {
     if (view !== "draw" || roundWinners.length === winnersThisRound) return;
     const timer = window.setInterval(() => {
-      setRolling((current) =>
-        current.map((person, index) =>
-          index < roundWinners.length ? person : randomPerson(excludedNames),
-        ),
-      );
+      setRolling((current) => {
+        const available = pool.filter((p) => !excludedDocuments.has(p.document));
+        // Fisher-Yates manual (inline) para el tick visual
+        for (let i = available.length - 1; i > 0; i--) {
+          const j = Math.floor((crypto.getRandomValues(new Uint32Array(1))[0] / 2**32) * (i + 1));
+          [available[i], available[j]] = [available[j], available[i]];
+        }
+        
+        let availIndex = 0;
+        return current.map((person, index) => {
+          if (index < roundWinners.length) return person;
+          const nextPerson = available[availIndex] ?? pool[0];
+          availIndex++;
+          return nextPerson;
+        });
+      });
     }, 85);
     return () => window.clearInterval(timer);
-  }, [excludedNames, roundWinners.length, view, winnersThisRound]);
+  }, [excludedDocuments, roundWinners.length, view, winnersThisRound]);
+
+const actionLock = useRef(false);
 
   const selectWinner = useCallback(() => {
-    if (view !== "draw") return;
+    if (view !== "draw" || actionLock.current) return;
 
     if (roundWinners.length === winnersThisRound) {
+      actionLock.current = true;
       if (round === ROUND_WINNER_COUNTS.length) {
         setView("final");
+        actionLock.current = false;
       } else {
         const nextRoundWinnerCount = ROUND_WINNER_COUNTS[round];
         setRound((current) => current + 1);
         setRoundWinners([]);
-        setRolling(Array.from({ length: nextRoundWinnerCount }, () => randomPerson(excludedNames)));
+        setRolling(Array.from({ length: nextRoundWinnerCount }, () => randomPerson(excludedDocuments)));
+        setTimeout(() => { actionLock.current = false; }, 700); // Bloqueo de 700ms entre rondas
       }
       return;
     }
 
+    actionLock.current = true;
     const index = roundWinners.length;
     let winner = rolling[index];
-    const alreadySelected = new Set([...excludedNames, ...roundWinners.map((item) => item.name)]);
-    if (alreadySelected.has(winner.name)) winner = randomPerson(alreadySelected);
+    const alreadySelected = new Set([...excludedDocuments, ...roundWinners.map((item) => item.document)]);
+    if (alreadySelected.has(winner.document)) winner = randomPerson(alreadySelected);
 
     setRolling((current) => current.map((person, slot) => (slot === index ? winner : person)));
     setRoundWinners((current) => [...current, winner]);
     setAllWinners((current) => [...current, winner]);
-  }, [excludedNames, rolling, round, roundWinners, view, winnersThisRound]);
+    setTimeout(() => { actionLock.current = false; }, 50);
+  }, [excludedDocuments, rolling, round, roundWinners, view, winnersThisRound]);
 
-  useEffect(() => {
+useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.code !== "Space") return;
+      if (event.code !== "Space" || event.repeat) return;
       event.preventDefault();
       if (view === "intro") setView("draw");
       else selectWinner();
@@ -201,6 +256,10 @@ export default function App() {
           <button type="button" onClick={() => setView("draw")}>
             Iniciar sorteo
           </button>
+          <label style={{ display: 'block', marginTop: '24px', fontSize: '14px', cursor: 'pointer', opacity: 0.7 }}>
+            Cargar participantes reales (JSON)
+            <input type="file" accept=".json" style={{ display: 'none' }} onChange={handleFileUpload} />
+          </label>
         </section>
       </PageFrame>
     );
@@ -220,9 +279,12 @@ export default function App() {
           </div>
           <div className="final-grid">
             {allWinners.map((winner, index) => (
-              <PersonCard person={winner} selected compact key={`${winner.name}-${index}`} />
+              <PersonCard person={winner} selected compact key={`${winner.document}-${index}`} />
             ))}
           </div>
+          <button type="button" onClick={resetDraw} style={{ marginTop: '40px', padding: '10px 20px', background: 'transparent', border: '1px solid white', color: 'white', borderRadius: '4px', cursor: 'pointer' }}>
+            Reiniciar Sorteo
+          </button>
         </section>
       </PageFrame>
     );
@@ -230,12 +292,7 @@ export default function App() {
 
   return (
     <PageFrame>
-      <button
-        type="button"
-        className="draw-content"
-        onClick={selectWinner}
-        aria-label="Sortear el siguiente posible ganador"
-      >
+      <section className="draw-content">
         <div className="draw-heading">
           <span>
             Ronda {round} de {ROUND_WINNER_COUNTS.length}
@@ -258,7 +315,14 @@ export default function App() {
             <span className={index < roundWinners.length ? "complete" : ""} key={index} />
           ))}
         </div>
-      </button>
+      <button 
+          type="button" 
+          onClick={selectWinner}
+          style={{ marginTop: '20px', padding: '10px 24px', background: '#ff6900', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontFamily: '"Rethink Sans:Medium", sans-serif', fontSize: '16px' }}
+        >
+          {roundWinners.length === winnersThisRound ? 'Siguiente' : 'Sortear ganador'}
+        </button>
+      </section>
     </PageFrame>
   );
 }

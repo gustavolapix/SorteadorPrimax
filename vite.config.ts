@@ -1,6 +1,5 @@
 import { defineConfig, type HtmlTagDescriptor, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
-import tailwindcss from "@tailwindcss/vite";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -19,8 +18,7 @@ export default defineConfig(({ mode }) => {
     },
     plugins: [
       react(),
-      tailwindcss(),
-      figmaSiteConfiguration(siteConfiguration),
+            figmaSiteConfiguration(siteConfiguration),
       figmaErrorOverlayReplay(),
       figmaReactRefreshBoundaryFallback(),
       figmaMakeKitPlugin({ storiesGlob: "/src/**/*.stories.{ts,tsx,js,jsx}" }),
