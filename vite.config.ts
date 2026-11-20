@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import { defineConfig, type HtmlTagDescriptor, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import fs from "node:fs";
@@ -487,3 +488,18 @@ function figmaLinkedPackageSourcemaps(): Plugin {
     },
   };
 }
+=======
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import path from "node:path";
+
+export default defineConfig({
+  base: "./",
+  plugins: [react()],
+  resolve: {
+    alias: {
+      "@": path.resolve(__dirname, "./src"),
+    },
+  },
+});
+>>>>>>> 3f98dd952e5902c4565aac6879b37f9e171c4bb3

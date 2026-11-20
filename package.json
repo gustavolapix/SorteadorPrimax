@@ -1,5 +1,9 @@
 {
+<<<<<<< HEAD
   "name": "figma-make-app",
+=======
+  "name": "sorteador-primax",
+>>>>>>> 3f98dd952e5902c4565aac6879b37f9e171c4bb3
   "version": "1.0.0",
   "private": true,
   "type": "module",

@@ -21,21 +21,33 @@
 
 @font-face {
   font-family: "Rethink Sans:Bold";
+<<<<<<< HEAD
   src: url("https://static.figma.com/font/RethinkSans_wght__1") format("woff2");
+=======
+  src: url("./fonts/RethinkSans-VariableFont_wght.ttf") format("truetype");
+>>>>>>> 3f98dd952e5902c4565aac6879b37f9e171c4bb3
   font-style: normal;
   font-weight: 700;
 }
 
 @font-face {
   font-family: "Rethink Sans:Medium";
+<<<<<<< HEAD
   src: url("https://static.figma.com/font/RethinkSans_wght__1") format("woff2");
+=======
+  src: url("./fonts/RethinkSans-VariableFont_wght.ttf") format("truetype");
+>>>>>>> 3f98dd952e5902c4565aac6879b37f9e171c4bb3
   font-style: normal;
   font-weight: 500;
 }
 
 @font-face {
   font-family: "Rethink Sans:Regular";
+<<<<<<< HEAD
   src: url("https://static.figma.com/font/RethinkSans_wght__1") format("woff2");
+=======
+  src: url("./fonts/RethinkSans-VariableFont_wght.ttf") format("truetype");
+>>>>>>> 3f98dd952e5902c4565aac6879b37f9e171c4bb3
   font-style: normal;
   font-weight: 400;
 }

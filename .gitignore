@@ -11,7 +11,10 @@ logs/
 *.log
 .claude-replay.*
 .tmp-*
+<<<<<<< HEAD
 /.figma/design-context/
+=======
+>>>>>>> 3f98dd952e5902c4565aac6879b37f9e171c4bb3
 
 # Platform-managed agentplat state, not project source. In the
 # client-initiated single-repo workspace layout (make's `Path: "."` spec) the
