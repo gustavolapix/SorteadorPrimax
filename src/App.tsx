@@ -316,12 +316,12 @@ function FooterStrips() {
     <div className="footer-strips">
       <img
         className="footer-superintendencia"
-        src="/assets/stripSuperintendencia.svg"
+        src="./assets/stripSuperintendencia.svg"
         alt="Vigilado Superintendencia Financiera de Colombia - Bancolombia S.A. Establecimiento Bancario"
       />
       <img
         className="footer-strip-logos"
-        src="/assets/stripLogos.svg"
+        src="./assets/stripLogos.svg"
         alt="En alianza con Bancolombia, Autoriza Coljuegos, Organiza Primax Siempre Más"
       />
     </div>
@@ -360,11 +360,11 @@ function PersonCard({
         <p className="person-name">{person.name}</p>
         <div className="person-details">
           <span>
-            <img src="/assets/5314f.svg" alt="" />
+            <img src="./assets/5314f.svg" alt="" />
             {person.location}
           </span>
           <span>
-            <img src="/assets/19edb.svg" alt="" />
+            <img src="./assets/19edb.svg" alt="" />
             {person.document}
           </span>
         </div>
@@ -379,7 +379,7 @@ function PageFrame({ view, children }: { view: View; children: React.ReactNode }
       <div className="vt-circle" aria-hidden="true" />
       <div className="vt-stage">
         <div className="backdrop" aria-hidden="true" />
-        <img className="campaign-logo" src="/assets/2c143.png" alt="Gana con Primax" />
+        <img className="campaign-logo" src="./assets/2c143.png" alt="Gana con Primax" />
         {children}
         <footer>
           <FooterStrips />
