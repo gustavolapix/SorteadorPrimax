@@ -81,14 +81,14 @@ const pool: Person[] = names.map((name, index) => ({
   document: `XXXXXX${String(1047 + index * 317).slice(-4)}`,
 }));
 
-const ROUND_WINNER_COUNTS = [3, 3, 3];
+const ROUND_WINNER_COUNTS = [3];
 const TOTAL_WINNERS = ROUND_WINNER_COUNTS.reduce((total, count) => total + count, 0);
-const ROUND_PAUSE_MS = 700;
+const ROUND_PAUSE_MS = 95;
 
 // Velocidad previa mas pausada y desaceleracion exponencial estilo jackpot: t(k) = BASE_MS * GROWTH^k
-const IDLE_ROLL_MS = 220;
-const SPIN_STEPS = 14;
-const SPIN_BASE_MS = 95;
+const IDLE_ROLL_MS = 250;
+const SPIN_STEPS = 10;
+const SPIN_BASE_MS = 250;
 const SPIN_EXP_GROWTH = 1.15;
 
 const STATE_STORAGE_KEY = "primax_sorteo_state_v2";
@@ -656,9 +656,9 @@ export default function App() {
       <ConfettiBurst trigger={confettiTrigger} durationMs={2800} />
       <section className="draw-content">
         <div className="draw-heading">
-          <span>
+          {/* <span>
             Ronda {round} de {ROUND_WINNER_COUNTS.length}
-          </span>
+          </span> */}
           <h1>Y los posibles ganadores son...</h1>
         </div>
         <div className="draw-grid" aria-live="polite">

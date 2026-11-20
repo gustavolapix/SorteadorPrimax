@@ -42,7 +42,7 @@
 
 :root {
   color: white;
-  background: #111;
+  background: #ff6900;
   font-family: "Rethink Sans:Regular", Arial, sans-serif;
   font-synthesis: none;
 }
@@ -106,6 +106,7 @@ html.vt-intro-to-draw .vt-stage {
   opacity: 0;
 }
 
+/*
 ::view-transition-group(vt-circle) {
   z-index: 2;
 }
@@ -115,9 +116,9 @@ html.vt-intro-to-draw .vt-stage {
 }
 
 ::view-transition-new(vt-circle) {
-  animation: vt-circle-fill 1050ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: vt-circle-fill 5000ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
-
+ 
 ::view-transition-group(vt-stage) {
   z-index: 3;
 }
@@ -127,7 +128,7 @@ html.vt-intro-to-draw .vt-stage {
 }
 
 ::view-transition-new(vt-stage) {
-  animation: vt-circle-reveal 1050ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: vt-circle-reveal 3000ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 @keyframes vt-circle-fill {
@@ -148,14 +149,61 @@ html.vt-intro-to-draw .vt-stage {
   100% {
     clip-path: circle(150% at 50% 50%);
   }
+} */
+
+::view-transition-group(vt-circle) {
+  z-index: 2;
 }
+
+::view-transition-old(vt-circle) {
+  display: none;
+}
+
+::view-transition-new(vt-circle) {
+  animation: vt-circle-fill 2000ms cubic-bezier(.49, 0, .12, .99) forwards;
+}
+
+::view-transition-group(vt-stage) {
+  z-index: 3;
+}
+
+::view-transition-old(vt-stage) {
+  display: none;
+}
+
+::view-transition-new(vt-stage) {
+  animation: vt-circle-reveal 2800ms cubic-bezier(.49, 0, .12, .99) both;
+  animation-delay: 1000ms; /* 2000ms + 2800ms = 4800ms (4,8s totales) */
+}
+
+@keyframes vt-circle-fill {
+  0% {
+    clip-path: circle(0% at 50% 50%);
+  }
+  100% {
+    clip-path: circle(150% at 50% 50%);
+  }
+}
+
+@keyframes vt-circle-reveal {
+  0% {
+    clip-path: circle(0% at 50% 50%);
+  }
+  100% {
+    clip-path: circle(150% at 50% 50%);
+  }
+}
+
+
+
+
 
 .backdrop {
   position: fixed;
   z-index: -2;
   inset: 0;
   background:
-    linear-gradient(180deg, rgba(0, 0, 0, 0.04) 0%, rgba(0, 0, 0, 0.1) 30%, #000 100%),
+    linear-gradient(180deg, rgba(0, 0, 0, 0.285) 0%, rgba(0, 0, 0, 0.731) 50%, #000000 100%),
     url("./assets/sorteadorBackground.png") center top / cover no-repeat;
 }
 
