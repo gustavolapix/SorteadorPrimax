@@ -18,7 +18,7 @@ export default defineConfig(({ mode }) => {
     },
     plugins: [
       react(),
-            figmaSiteConfiguration(siteConfiguration),
+      figmaSiteConfiguration(siteConfiguration),
       figmaErrorOverlayReplay(),
       figmaReactRefreshBoundaryFallback(),
       figmaMakeKitPlugin({ storiesGlob: "/src/**/*.stories.{ts,tsx,js,jsx}" }),

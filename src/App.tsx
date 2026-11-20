@@ -1,5 +1,5 @@
-import { useRef } from 'react';
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 
 type Person = {
   name: string;
@@ -7,6 +7,28 @@ type Person = {
   document: string;
 };
 
+type View = "intro" | "draw" | "final";
+
+type SpinState = {
+  slotIndex: number;
+  winner: Person;
+  sequence: Person[];
+  step: number;
+  stepMs: number;
+};
+
+type DrawState = {
+  view: View;
+  round: number;
+  roundWinners: Person[];
+  allWinners: Person[];
+  rolling: Person[];
+  spin: SpinState | null;
+  roundCompletedAt: number | null;
+  confettiTrigger: number;
+};
+
+// Base de pruebas local (en produccion se reemplazara por la carga desde backend)
 const names = [
   "María Tarazona Contreras López",
   "Carmen Carvajal",
@@ -53,22 +75,241 @@ const locations = [
   "Santa Marta, Magdalena",
 ];
 
-const defaultPool: Person[] = names.map((name, index) => ({
+const pool: Person[] = names.map((name, index) => ({
   name,
   location: locations[index % locations.length],
   document: `XXXXXX${String(1047 + index * 317).slice(-4)}`,
 }));
 
-const storedPool = localStorage.getItem("customPool");
-const pool: Person[] = storedPool ? JSON.parse(storedPool) : defaultPool;
-
-const ROUND_WINNER_COUNTS = [6, 6, 3];
+const ROUND_WINNER_COUNTS = [3, 3, 3];
 const TOTAL_WINNERS = ROUND_WINNER_COUNTS.reduce((total, count) => total + count, 0);
+const ROUND_PAUSE_MS = 700;
 
-const randomPerson = (excludedDocuments: Set<string> = new Set()) => {
-  const available = pool.filter((person) => !excludedDocuments.has(person.document));
-  return available[Math.floor((crypto.getRandomValues(new Uint32Array(1))[0] / 2**32) * available.length)] ?? pool[0];
+// Velocidad previa mas pausada y desaceleracion exponencial estilo jackpot: t(k) = BASE_MS * GROWTH^k
+const IDLE_ROLL_MS = 220;
+const SPIN_STEPS = 14;
+const SPIN_BASE_MS = 95;
+const SPIN_EXP_GROWTH = 1.15;
+
+const STATE_STORAGE_KEY = "primax_sorteo_state_v2";
+
+function randomInt(max: number): number {
+  const buf = new Uint32Array(1);
+  crypto.getRandomValues(buf);
+  return Math.floor((buf[0] / 2 ** 32) * max);
+}
+
+function pickDistinct(source: Person[], excludedDocs: Set<string>, count: number): Person[] {
+  const available = source.filter((person) => !excludedDocs.has(person.document));
+  for (let i = available.length - 1; i > 0; i--) {
+    const j = randomInt(i + 1);
+    [available[i], available[j]] = [available[j], available[i]];
+  }
+  return available.slice(0, count);
+}
+
+function buildJackpotSequence(winner: Person, excludedDocs: Set<string>): Person[] {
+  const decoys = pool.filter(
+    (person) => !excludedDocs.has(person.document) && person.document !== winner.document,
+  );
+  const sequence: Person[] = [];
+  let prevDoc = "";
+
+  for (let i = 0; i < SPIN_STEPS - 1; i++) {
+    const candidates = decoys.filter((p) => p.document !== prevDoc);
+    const source = candidates.length > 0 ? candidates : decoys;
+    const picked = source[randomInt(source.length)] ?? winner;
+    sequence.push(picked);
+    prevDoc = picked.document;
+  }
+
+  sequence.push(winner);
+  return sequence;
+}
+
+function exponentialStepDelay(step: number): number {
+  return Math.round(SPIN_BASE_MS * Math.pow(SPIN_EXP_GROWTH, step));
+}
+
+function createFreshIntroState(): DrawState {
+  return {
+    view: "intro",
+    round: 1,
+    roundWinners: [],
+    allWinners: [],
+    rolling: pickDistinct(pool, new Set(), ROUND_WINNER_COUNTS[0]),
+    spin: null,
+    roundCompletedAt: null,
+    confettiTrigger: 0,
+  };
+}
+
+function buildInitialState(): DrawState {
+  const fallback = createFreshIntroState();
+
+  try {
+    const raw = localStorage.getItem(STATE_STORAGE_KEY);
+    if (!raw) return fallback;
+    const saved = JSON.parse(raw) as Partial<DrawState>;
+    const view: View =
+      saved.view === "intro" || saved.view === "draw" || saved.view === "final"
+        ? saved.view
+        : "intro";
+    const round =
+      typeof saved.round === "number" &&
+      Number.isInteger(saved.round) &&
+      saved.round >= 1 &&
+      saved.round <= ROUND_WINNER_COUNTS.length
+        ? saved.round
+        : 1;
+    const target = ROUND_WINNER_COUNTS[round - 1];
+    const isPerson = (p: unknown): p is Person =>
+      Boolean(p) &&
+      typeof p === "object" &&
+      typeof (p as Person).name === "string" &&
+      typeof (p as Person).location === "string" &&
+      typeof (p as Person).document === "string";
+
+    const roundWinners = Array.isArray(saved.roundWinners)
+      ? saved.roundWinners.filter(isPerson).slice(0, target)
+      : [];
+    const allWinners = Array.isArray(saved.allWinners)
+      ? saved.allWinners.filter(isPerson).slice(0, TOTAL_WINNERS)
+      : [];
+
+    const excluded = new Set(allWinners.map((w) => w.document));
+    const fillers = pickDistinct(pool, excluded, Math.max(0, target - roundWinners.length));
+
+    return {
+      view,
+      round,
+      roundWinners,
+      allWinners,
+      rolling: [...roundWinners, ...fillers],
+      spin: null,
+      roundCompletedAt: null,
+      confettiTrigger: 0,
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+type Particle = {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  w: number;
+  h: number;
+  color: string;
+  rotation: number;
+  vRot: number;
+  wobble: number;
+  spawnDelayMs: number;
 };
+
+const CONFETTI_COLORS = ["#FF6900", "#1E22AA", "#FFE13D"];
+
+function ConfettiBurst({
+  trigger,
+  durationMs = 2800,
+}: {
+  trigger: number;
+  durationMs?: number;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  useEffect(() => {
+    if (trigger === 0) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const resize = () => {
+      canvas.width = Math.floor(window.innerWidth * dpr);
+      canvas.height = Math.floor(window.innerHeight * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    };
+    resize();
+    window.addEventListener("resize", resize);
+
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    const scale = Math.max(0.75, Math.min(width, height) / 820);
+    const count = durationMs > 3000 ? 210 : 140;
+    const maxSpawnDelay = Math.max(0, durationMs - 2200);
+
+    // Disparo diagonal desde las esquinas inferiores izquierda y derecha
+    const particles: Particle[] = Array.from({ length: count }, (_, index) => {
+      const fromLeft = index % 2 === 0;
+      const spreadDeg = 26 + Math.random() * 34; // 26° a 60° sobre la horizontal
+      const angle = (spreadDeg * Math.PI) / 180;
+      const speed = (14 + Math.random() * 12) * scale;
+      const dir = fromLeft ? 1 : -1;
+
+      return {
+        x: fromLeft ? Math.random() * 28 : width - Math.random() * 28,
+        y: height - Math.random() * 18,
+        vx: Math.cos(angle) * speed * dir,
+        vy: -Math.sin(angle) * speed,
+        w: 8 + Math.random() * 7,
+        h: 4 + Math.random() * 5,
+        color: CONFETTI_COLORS[index % CONFETTI_COLORS.length],
+        rotation: Math.random() * Math.PI * 2,
+        vRot: (Math.random() - 0.5) * 0.22,
+        wobble: Math.random() * Math.PI * 2,
+        spawnDelayMs: maxSpawnDelay > 0 ? Math.random() * maxSpawnDelay : 0,
+      };
+    });
+
+    let rafId = 0;
+    const start = performance.now();
+
+    const render = (now: number) => {
+      const elapsed = now - start;
+      const progress = Math.min(elapsed / durationMs, 1);
+      ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+
+      for (const p of particles) {
+        if (elapsed < p.spawnDelayMs) continue;
+
+        p.wobble += 0.08;
+        p.vx *= 0.988;
+        p.vy = p.vy * 0.992 + 0.36;
+        p.x += p.vx + Math.sin(p.wobble) * 0.9;
+        p.y += p.vy;
+        p.rotation += p.vRot;
+
+        ctx.save();
+        ctx.globalAlpha = progress > 0.78 ? Math.max(0, 1 - (progress - 0.78) / 0.22) : 1;
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.rotation);
+        ctx.fillStyle = p.color;
+        ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+        ctx.restore();
+      }
+
+      if (progress < 1) {
+        rafId = window.requestAnimationFrame(render);
+      } else {
+        ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+      }
+    };
+
+    rafId = window.requestAnimationFrame(render);
+    return () => {
+      window.cancelAnimationFrame(rafId);
+      window.removeEventListener("resize", resize);
+    };
+  }, [durationMs, trigger]);
+
+  return <canvas ref={canvasRef} className="confetti-canvas" aria-hidden="true" />;
+}
 
 function FooterStrips() {
   return (
@@ -91,175 +332,297 @@ function PersonCard({
   person,
   selected = false,
   compact = false,
+  rollingTickKey,
+  rollingDurationMs,
 }: {
   person: Person;
   selected?: boolean;
   compact?: boolean;
+  rollingTickKey?: string;
+  rollingDurationMs?: number;
 }) {
   return (
     <article
-      className={`person-card ${selected ? "person-card--selected" : ""} ${
+      className={`person-card ${selected ? "person-card--selected" : "person-card--rolling"} ${
         compact ? "person-card--compact" : ""
       }`}
     >
-      <p className="person-name">{person.name}</p>
-      <div className="person-details">
-        <span>
-          <img src="/assets/5314f.svg" alt="" />
-          {person.location}
-        </span>
-        <span>
-          <img src="/assets/19edb.svg" alt="" />
-          {person.document}
-        </span>
+      {selected && <span className="winner-chip">¡Felicidades!</span>}
+      <div
+        key={selected ? `winner-${person.document}` : rollingTickKey}
+        className="person-slot-track"
+        style={
+          !selected && rollingDurationMs
+            ? ({ "--tick-duration": `${rollingDurationMs}ms` } as React.CSSProperties)
+            : undefined
+        }
+      >
+        <p className="person-name">{person.name}</p>
+        <div className="person-details">
+          <span>
+            <img src="/assets/5314f.svg" alt="" />
+            {person.location}
+          </span>
+          <span>
+            <img src="/assets/19edb.svg" alt="" />
+            {person.document}
+          </span>
+        </div>
       </div>
     </article>
   );
 }
 
-function PageFrame({ children }: { children: React.ReactNode }) {
+function PageFrame({ view, children }: { view: View; children: React.ReactNode }) {
   return (
-    <main className="page-frame">
-      <div className="backdrop" aria-hidden="true" />
-      <img className="campaign-logo" src="/assets/2c143.png" alt="Gana con Primax" />
-      {children}
-      <footer>
-        <FooterStrips />
-      </footer>
+    <main className={`page-frame page-frame--${view}`}>
+      <div className="vt-circle" aria-hidden="true" />
+      <div className="vt-stage">
+        <div className="backdrop" aria-hidden="true" />
+        <img className="campaign-logo" src="/assets/2c143.png" alt="Gana con Primax" />
+        {children}
+        <footer>
+          <FooterStrips />
+        </footer>
+      </div>
     </main>
   );
 }
 
 export default function App() {
-const [view, setView] = useState<"intro" | "draw" | "final">(() => (localStorage.getItem("view") as "intro" | "draw" | "final") || "intro");
-const [round, setRound] = useState(() => parseInt(localStorage.getItem("round") || "1", 10));
-const [roundWinners, setRoundWinners] = useState<Person[]>(() => JSON.parse(localStorage.getItem("roundWinners") || "[]"));
-const [allWinners, setAllWinners] = useState<Person[]>(() => JSON.parse(localStorage.getItem("allWinners") || "[]"));
-
-useEffect(() => {
-  localStorage.setItem("view", view);
-  localStorage.setItem("round", round.toString());
-  localStorage.setItem("roundWinners", JSON.stringify(roundWinners));
-  localStorage.setItem("allWinners", JSON.stringify(allWinners));
-}, [view, round, roundWinners, allWinners]);
-
-const resetDraw = () => {
-  if (!window.confirm("¿Seguro que deseas reiniciar el sorteo? Se perderán todos los ganadores actuales.")) return;
-  localStorage.clear();
-  setView("intro");
-  setRound(1);
-  setRoundWinners([]);
-  setAllWinners([]);
-};
-
-const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-  const file = e.target.files?.[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    try {
-      const data = JSON.parse(e.target?.result as string) as Person[];
-      if (Array.isArray(data) && data.length >= TOTAL_WINNERS) {
-        localStorage.setItem("customPool", JSON.stringify(data));
-        window.location.reload();
-      } else {
-        alert(`El archivo debe ser un JSON con al menos ${TOTAL_WINNERS} participantes válidos.`);
-      }
-    } catch {
-      alert("Error al procesar el archivo JSON.");
-    }
-  };
-  reader.readAsText(file);
-};
+  const [state, setState] = useState<DrawState>(buildInitialState);
+  const { view, round, roundWinners, allWinners, rolling, spin, confettiTrigger } = state;
   const winnersThisRound = ROUND_WINNER_COUNTS[round - 1];
+  const isRoundComplete = roundWinners.length >= winnersThisRound;
+  const isTransitioningRef = useRef(false);
 
-  const excludedDocuments = useMemo(
-    () => new Set(allWinners.map((winner) => winner.document)),
-    [allWinners],
-  );
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        STATE_STORAGE_KEY,
+        JSON.stringify({ view, round, roundWinners, allWinners }),
+      );
+    } catch {
+      // Ignore storage quota errors
+    }
+  }, [allWinners, round, roundWinners, view]);
 
-useEffect(() => {
-    if (view !== "draw" || roundWinners.length === winnersThisRound) return;
+  // Giro continuo fluido para las tarjetas pendientes mientras no estan desacelerando
+  useEffect(() => {
+    if (view !== "draw" || isRoundComplete) return;
     const timer = window.setInterval(() => {
-      setRolling((current) => {
-        const available = pool.filter((p) => !excludedDocuments.has(p.document));
-        // Fisher-Yates manual (inline) para el tick visual
-        for (let i = available.length - 1; i > 0; i--) {
-          const j = Math.floor((crypto.getRandomValues(new Uint32Array(1))[0] / 2**32) * (i + 1));
-          [available[i], available[j]] = [available[j], available[i]];
+      setState((prev) => {
+        const target = ROUND_WINNER_COUNTS[prev.round - 1];
+        if (prev.view !== "draw" || prev.roundWinners.length >= target) return prev;
+
+        const lockedCount = prev.spin ? prev.spin.slotIndex + 1 : prev.roundWinners.length;
+        const freeSlots = target - lockedCount;
+        if (freeSlots <= 0) return prev;
+
+        const excluded = new Set(prev.allWinners.map((w) => w.document));
+        if (prev.spin) excluded.add(prev.spin.winner.document);
+        const fillers = pickDistinct(pool, excluded, freeSlots);
+
+        return {
+          ...prev,
+          rolling: [...prev.rolling.slice(0, lockedCount), ...fillers],
+        };
+      });
+    }, IDLE_ROLL_MS);
+    return () => window.clearInterval(timer);
+  }, [isRoundComplete, view]);
+
+  // Desaceleracion exponencial estilo jackpot: aterriza en el ganador y luego lo consagra
+  useEffect(() => {
+    if (!spin) return;
+
+    const timer = window.setTimeout(() => {
+      setState((prev) => {
+        if (!prev.spin) return prev;
+        const nextStep = prev.spin.step + 1;
+
+        // Cuando termina la pausa del ultimo paso (que ya muestra al ganador), se marca como ganador
+        if (nextStep >= prev.spin.sequence.length) {
+          const winner = prev.spin.winner;
+          const target = ROUND_WINNER_COUNTS[prev.round - 1];
+          const nextRoundWinners = [...prev.roundWinners, winner];
+          const nextAllWinners = [...prev.allWinners, winner];
+          const completedNow = nextRoundWinners.length === target;
+
+          return {
+            ...prev,
+            rolling: prev.rolling.map((person, slot) =>
+              slot === prev.spin!.slotIndex ? winner : person,
+            ),
+            roundWinners: nextRoundWinners,
+            allWinners: nextAllWinners,
+            spin: null,
+            roundCompletedAt: completedNow ? Date.now() : null,
+            confettiTrigger: prev.confettiTrigger + 1,
+          };
         }
-        
-        let availIndex = 0;
-        return current.map((person, index) => {
-          if (index < roundWinners.length) return person;
-          const nextPerson = available[availIndex] ?? pool[0];
-          availIndex++;
-          return nextPerson;
+
+        const nextPerson = prev.spin.sequence[nextStep];
+        return {
+          ...prev,
+          rolling: prev.rolling.map((person, slot) =>
+            slot === prev.spin!.slotIndex ? nextPerson : person,
+          ),
+          spin: {
+            ...prev.spin,
+            step: nextStep,
+            stepMs: exponentialStepDelay(nextStep),
+          },
+        };
+      });
+    }, spin.stepMs);
+
+    return () => window.clearTimeout(timer);
+  }, [spin]);
+
+  const startDrawWithTransition = useCallback(() => {
+    if (isTransitioningRef.current) return;
+
+    const nextDrawState: DrawState = {
+      view: "draw",
+      round: 1,
+      roundWinners: [],
+      allWinners: [],
+      rolling: pickDistinct(pool, new Set(), ROUND_WINNER_COUNTS[0]),
+      spin: null,
+      roundCompletedAt: null,
+      confettiTrigger: 0,
+    };
+
+    const doc = document as Document & {
+      startViewTransition?: (cb: () => void) => { finished: Promise<void> };
+    };
+
+    if (doc.startViewTransition && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      isTransitioningRef.current = true;
+      document.documentElement.classList.add("vt-intro-to-draw");
+      const transition = doc.startViewTransition(() => {
+        flushSync(() => {
+          setState(nextDrawState);
         });
       });
-    }, 85);
-    return () => window.clearInterval(timer);
-  }, [excludedDocuments, roundWinners.length, view, winnersThisRound]);
-
-const actionLock = useRef(false);
-
-  const selectWinner = useCallback(() => {
-    if (view !== "draw" || actionLock.current) return;
-
-    if (roundWinners.length === winnersThisRound) {
-      actionLock.current = true;
-      if (round === ROUND_WINNER_COUNTS.length) {
-        setView("final");
-        actionLock.current = false;
-      } else {
-        const nextRoundWinnerCount = ROUND_WINNER_COUNTS[round];
-        setRound((current) => current + 1);
-        setRoundWinners([]);
-        setRolling(Array.from({ length: nextRoundWinnerCount }, () => randomPerson(excludedDocuments)));
-        setTimeout(() => { actionLock.current = false; }, 700); // Bloqueo de 700ms entre rondas
-      }
-      return;
+      transition.finished.finally(() => {
+        document.documentElement.classList.remove("vt-intro-to-draw");
+        isTransitioningRef.current = false;
+      });
+    } else {
+      setState(nextDrawState);
     }
+  }, []);
 
-    actionLock.current = true;
-    const index = roundWinners.length;
-    let winner = rolling[index];
-    const alreadySelected = new Set([...excludedDocuments, ...roundWinners.map((item) => item.document)]);
-    if (alreadySelected.has(winner.document)) winner = randomPerson(alreadySelected);
+  const advanceDraw = useCallback(() => {
+    setState((prev) => {
+      if (prev.view !== "draw" || prev.spin !== null) return prev;
 
-    setRolling((current) => current.map((person, slot) => (slot === index ? winner : person)));
-    setRoundWinners((current) => [...current, winner]);
-    setAllWinners((current) => [...current, winner]);
-    setTimeout(() => { actionLock.current = false; }, 50);
-  }, [excludedDocuments, rolling, round, roundWinners, view, winnersThisRound]);
+      const target = ROUND_WINNER_COUNTS[prev.round - 1];
+      if (prev.roundWinners.length >= target) {
+        if (prev.roundCompletedAt && Date.now() - prev.roundCompletedAt < ROUND_PAUSE_MS) {
+          return prev;
+        }
+        if (prev.round >= ROUND_WINNER_COUNTS.length) {
+          return {
+            ...prev,
+            view: "final",
+            roundCompletedAt: Date.now(),
+            confettiTrigger: prev.confettiTrigger + 1,
+          };
+        }
+        const nextRound = prev.round + 1;
+        const nextCount = ROUND_WINNER_COUNTS[nextRound - 1];
+        const excluded = new Set(prev.allWinners.map((w) => w.document));
+        return {
+          ...prev,
+          round: nextRound,
+          roundWinners: [],
+          rolling: pickDistinct(pool, excluded, nextCount),
+          spin: null,
+          roundCompletedAt: null,
+        };
+      }
 
-useEffect(() => {
+      const slotIndex = prev.roundWinners.length;
+      const excluded = new Set(prev.allWinners.map((w) => w.document));
+      const winner = pickDistinct(pool, excluded, 1)[0];
+      if (!winner) return prev;
+
+      const sequence = buildJackpotSequence(winner, excluded);
+      const initialStepMs = exponentialStepDelay(0);
+
+      return {
+        ...prev,
+        rolling: prev.rolling.map((person, slot) => (slot === slotIndex ? sequence[0] : person)),
+        spin: {
+          slotIndex,
+          winner,
+          sequence,
+          step: 0,
+          stepMs: initialStepMs,
+        },
+      };
+    });
+  }, []);
+
+  const resetDraw = useCallback(() => {
+    setState((prev) => {
+      if (prev.view !== "final") return prev;
+      if (prev.roundCompletedAt && Date.now() - prev.roundCompletedAt < ROUND_PAUSE_MS) {
+        return prev;
+      }
+      try {
+        localStorage.removeItem(STATE_STORAGE_KEY);
+      } catch {
+        // Ignore storage errors
+      }
+      return createFreshIntroState();
+    });
+  }, []);
+
+  useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.code !== "Space" || event.repeat) return;
-      event.preventDefault();
-      if (view === "intro") setView("draw");
-      else selectWinner();
+      if (event.repeat) return;
+      const isEnter =
+        event.key === "Enter" || event.code === "Enter" || event.code === "NumpadEnter";
+      const isSpace = event.code === "Space";
+
+      if (view === "intro") {
+        if (!isEnter && !isSpace) return;
+        event.preventDefault();
+        startDrawWithTransition();
+        return;
+      }
+
+      if (view === "draw") {
+        if (!isEnter && !isSpace) return;
+        event.preventDefault();
+        advanceDraw();
+        return;
+      }
+
+      if (view === "final") {
+        if (!isEnter && !isSpace) return;
+        event.preventDefault();
+        resetDraw();
+      }
     };
+
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selectWinner, view]);
+  }, [advanceDraw, resetDraw, startDrawWithTransition, view]);
 
   if (view === "intro") {
     return (
-      <PageFrame>
+      <PageFrame view="intro">
         <section className="intro">
           <h1>
             ¡Bienvenidos a nuestro
             <br />
             primer sorteo!
           </h1>
-          <button type="button" onClick={() => setView("draw")}>
-            Iniciar sorteo
-          </button>
-          <label style={{ display: 'block', marginTop: '24px', fontSize: '14px', cursor: 'pointer', opacity: 0.7 }}>
-            Cargar participantes reales (JSON)
-            <input type="file" accept=".json" style={{ display: 'none' }} onChange={handleFileUpload} />
-          </label>
         </section>
       </PageFrame>
     );
@@ -267,7 +630,8 @@ useEffect(() => {
 
   if (view === "final") {
     return (
-      <PageFrame>
+      <PageFrame view="final">
+        <ConfettiBurst trigger={confettiTrigger} durationMs={4000} />
         <section className="final-content" aria-live="polite">
           <div className="final-heading">
             <h1>
@@ -282,16 +646,14 @@ useEffect(() => {
               <PersonCard person={winner} selected compact key={`${winner.document}-${index}`} />
             ))}
           </div>
-          <button type="button" onClick={resetDraw} style={{ marginTop: '40px', padding: '10px 20px', background: 'transparent', border: '1px solid white', color: 'white', borderRadius: '4px', cursor: 'pointer' }}>
-            Reiniciar Sorteo
-          </button>
         </section>
       </PageFrame>
     );
   }
 
   return (
-    <PageFrame>
+    <PageFrame view="draw">
+      <ConfettiBurst trigger={confettiTrigger} durationMs={2800} />
       <section className="draw-content">
         <div className="draw-heading">
           <span>
@@ -299,13 +661,23 @@ useEffect(() => {
           </span>
           <h1>Y los posibles ganadores son...</h1>
         </div>
-        <div
-          className={`draw-grid ${winnersThisRound % 2 !== 0 ? "draw-grid--center-last" : ""}`}
-          aria-live="polite"
-        >
-          {rolling.map((person, index) => (
-            <PersonCard person={person} selected={index < roundWinners.length} key={index} />
-          ))}
+        <div className="draw-grid" aria-live="polite">
+          {rolling.map((person, index) => {
+            const isSelected = index < roundWinners.length;
+            const isSpinningSlot = spin?.slotIndex === index;
+            const tickKey = isSpinningSlot
+              ? `spin-${index}-${spin.step}-${person.document}`
+              : `roll-${index}-${person.document}`;
+            return (
+              <PersonCard
+                person={person}
+                selected={isSelected}
+                rollingTickKey={tickKey}
+                rollingDurationMs={isSpinningSlot ? spin.stepMs : IDLE_ROLL_MS}
+                key={isSelected ? person.document : `slot-${index}`}
+              />
+            );
+          })}
         </div>
         <div
           className="round-progress"
@@ -315,13 +687,6 @@ useEffect(() => {
             <span className={index < roundWinners.length ? "complete" : ""} key={index} />
           ))}
         </div>
-      <button 
-          type="button" 
-          onClick={selectWinner}
-          style={{ marginTop: '20px', padding: '10px 24px', background: '#ff6900', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontFamily: '"Rethink Sans:Medium", sans-serif', fontSize: '16px' }}
-        >
-          {roundWinners.length === winnersThisRound ? 'Siguiente' : 'Sortear ganador'}
-        </button>
       </section>
     </PageFrame>
   );
