@@ -1,29 +1,20 @@
-@import "tailwindcss";
-
-@font-face {
-  font-family: "CIBFont Sans:Bold";
-  src: url("/fonts/CIBFont_Sans-Bold.woff2") format("woff2");
-  font-style: normal;
-  font-weight: 700;
-}
-
 @font-face {
   font-family: "Clash Grotesk:Bold";
-  src: url("/fonts/Clash_Grotesk-Bold.woff2") format("woff2");
+  src: url("./fonts/Clash_Grotesk-Bold.woff2") format("woff2");
   font-style: normal;
   font-weight: 700;
 }
 
 @font-face {
   font-family: "Clash Grotesk:Medium";
-  src: url("/fonts/Clash_Grotesk-Medium.woff2") format("woff2");
+  src: url("./fonts/Clash_Grotesk-Medium.woff2") format("woff2");
   font-style: normal;
   font-weight: 500;
 }
 
 @font-face {
   font-family: "Clash Grotesk:Semibold";
-  src: url("/fonts/Clash_Grotesk-Semibold.woff2") format("woff2");
+  src: url("./fonts/Clash_Grotesk-Semibold.woff2") format("woff2");
   font-style: normal;
   font-weight: 600;
 }
@@ -62,34 +53,131 @@ body {
   min-height: 100dvh;
 }
 
-button {
-  font: inherit;
-}
-
 .page-frame {
   position: relative;
   display: grid;
   min-height: 100dvh;
-  overflow: hidden;
+  overflow-x: clip;
+  overflow-y: auto;
   isolation: isolate;
+}
+
+.vt-circle {
+  position: fixed;
+  z-index: 40;
+  inset: 0;
+  background: linear-gradient(135deg, #ff6900 0%, #FFE13D 100%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.vt-stage {
+  position: relative;
+  display: grid;
+  min-height: 100dvh;
+  isolation: isolate;
+}
+
+/* View Transition: circulo naranja llena pantalla -> segundo circulo en el centro enmascara pantalla #2 */
+html.vt-intro-to-draw {
+  view-transition-name: root;
+}
+
+html.vt-intro-to-draw .vt-circle {
+  opacity: 1;
+  view-transition-name: vt-circle;
+}
+
+html.vt-intro-to-draw .vt-stage {
+  view-transition-name: vt-stage;
+}
+
+::view-transition-group(root) {
+  z-index: 1;
+}
+
+::view-transition-old(root) {
+  animation: none;
+  opacity: 1;
+}
+
+::view-transition-new(root) {
+  animation: none;
+  opacity: 0;
+}
+
+::view-transition-group(vt-circle) {
+  z-index: 2;
+}
+
+::view-transition-old(vt-circle) {
+  display: none;
+}
+
+::view-transition-new(vt-circle) {
+  animation: vt-circle-fill 1050ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+::view-transition-group(vt-stage) {
+  z-index: 3;
+}
+
+::view-transition-old(vt-stage) {
+  display: none;
+}
+
+::view-transition-new(vt-stage) {
+  animation: vt-circle-reveal 1050ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes vt-circle-fill {
+  0% {
+    clip-path: circle(0% at 50% 50%);
+  }
+  46%,
+  100% {
+    clip-path: circle(150% at 50% 50%);
+  }
+}
+
+@keyframes vt-circle-reveal {
+  0%,
+  46% {
+    clip-path: circle(0% at 50% 50%);
+  }
+  100% {
+    clip-path: circle(150% at 50% 50%);
+  }
 }
 
 .backdrop {
   position: fixed;
-  z-index: -3;
-  inset: 0;
-  background:
-    linear-gradient(180deg, rgba(0, 0, 0, 0.04) 0%, rgba(0, 0, 0, 0.1) 30%, #000 100%),
-    url("/assets/sorteadorBackground.png") center top / cover no-repeat;
-}
-
-.backdrop-overlay {
-  position: fixed;
   z-index: -2;
   inset: 0;
   background:
-    radial-gradient(ellipse at 50% 30%, rgba(0, 0, 0, 0.45) 0%, rgba(0, 0, 0, 0.78) 100%),
-    linear-gradient(180deg, rgba(20, 8, 0, 0.4) 0%, rgba(0, 0, 0, 0.75) 100%);
+    linear-gradient(180deg, rgba(0, 0, 0, 0.04) 0%, rgba(0, 0, 0, 0.1) 30%, #000 100%),
+    url("./assets/sorteadorBackground.png") center top / cover no-repeat;
+}
+
+/* Overlay oscuro por defecto en Pantalla #2 (y vista final) para resaltar tarjetas */
+.page-frame--draw .backdrop,
+.page-frame--final .backdrop {
+  background:
+    linear-gradient(
+      180deg,
+      rgba(0, 0, 0, 0.62) 0%,
+      rgba(0, 0, 0, 0.72) 48%,
+      rgba(0, 0, 0, 0.92) 100%
+    ),
+    url("./assets/sorteadorBackground.png") center top / cover no-repeat;
+}
+
+.confetti-canvas {
+  position: fixed;
+  z-index: 25;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   pointer-events: none;
 }
 
@@ -145,39 +233,11 @@ button {
 }
 
 .intro h1 {
-  margin: 0 0 24px;
+  margin: 0;
   font-family: "Clash Grotesk:Bold", sans-serif;
   font-size: clamp(43px, 5vw, 71.375px);
   font-weight: 700;
   line-height: 1;
-}
-
-.intro button {
-  min-width: 44px;
-  height: 44px;
-  padding: 2px 20px;
-  border: 0;
-  border-radius: 4px;
-  color: white;
-  background: #ff6900;
-  font-family: "Rethink Sans:Medium", sans-serif;
-  font-size: 16px;
-  font-weight: 500;
-  cursor: pointer;
-  transition:
-    transform 180ms ease,
-    background 180ms ease;
-}
-
-.intro button:hover {
-  background: #e95f00;
-  transform: translateY(-2px);
-}
-
-.intro button:focus-visible,
-.draw-content:focus-visible {
-  outline: 3px solid white;
-  outline-offset: 5px;
 }
 
 .draw-content {
@@ -186,8 +246,8 @@ button {
   align-items: center;
   align-self: center;
   justify-self: center;
-  width: min(100%, 1200px);
-  padding: 135px 24px 110px;
+  width: min(100%, 1140px);
+  padding: 136px 30px 110px;
   border: 0;
   color: white;
   background: transparent;
@@ -201,7 +261,7 @@ button {
 .draw-heading span {
   display: inline-block;
   margin-bottom: 8px;
-  padding: 5px 12px;
+  padding: 5px 14px;
   border: 1px solid rgba(255, 255, 255, 0.45);
   border-radius: 20px;
   font-family: "Rethink Sans:Medium", sans-serif;
@@ -213,67 +273,179 @@ button {
   font-family: "Clash Grotesk:Semibold", sans-serif;
   font-size: clamp(30px, 2.5vw, 36px);
   font-weight: 600;
-  line-height: 44px;
+  line-height: 1.15;
 }
 
+/* Distribucion: 2 tarjetas arriba y 1 centrada debajo */
 .draw-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 510px));
+  grid-template-columns: repeat(2, minmax(0, 450px));
   justify-content: center;
-  gap: 20px 30px;
-  width: min(100%, 1060px);
+  gap: 16px 24px;
+  width: min(100%, 924px);
 }
 
-.draw-grid--center-last > *:last-child,
-.draw-grid--center-last .person-card:last-child {
+.draw-grid .person-card:last-child {
   grid-column: 1 / -1;
   justify-self: center;
-  width: min(100%, 510px);
+  width: min(100%, 450px);
 }
 
 .person-card {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   min-width: 0;
-  height: 95px;
-  padding: 13px 20px;
+  height: 102px;
+  padding: 12px 20px;
   overflow: hidden;
-  border: 2.2px solid white;
-  border-radius: 20px;
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  border-radius: 18px;
   background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(4px);
   transition:
     border-color 300ms ease,
     background 300ms ease,
-    transform 300ms ease,
-    box-shadow 300ms ease;
+    transform 300ms ease;
 }
 
+.person-slot-track {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+}
+
+.person-card--rolling .person-slot-track {
+  animation: jackpot-slot-tick var(--tick-duration, 220ms) cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes jackpot-slot-tick {
+  0% {
+    opacity: 0.55;
+    transform: translateY(-14px) scale(0.985);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.winner-chip {
+  display: inline-flex;
+  align-items: center;
+  margin-bottom: 4px;
+  padding: 2px 11px;
+  border: 1px solid #ffd280;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #ff6900 0%, #ff9500 100%);
+  color: #fff;
+  font-family: "Rethink Sans:Bold", sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  line-height: 1.2;
+  text-transform: uppercase;
+  animation: chip-pop 420ms cubic-bezier(0.2, 0.9, 0.25, 1.25);
+}
+
+@keyframes chip-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Sin resplandor en los bordes de la tarjeta; solo palpitacion suave del fondo transparente */
 .person-card--selected {
   border-color: #ff6900;
-  background: rgba(255, 105, 0, 0.35);
-  box-shadow: 0 8px 28px rgba(255, 105, 0, 0.15);
-  animation: winner-pop 420ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  background: rgba(255, 105, 0, 0.28);
+  animation:
+    winner-pop 480ms cubic-bezier(0.2, 0.85, 0.25, 1.2),
+    winner-card-pulse 1.8s ease-in-out 480ms infinite;
 }
 
 .person-name {
   width: 100%;
-  margin: 0 0 6px;
+  margin: 0 0 5px;
   overflow: hidden;
+  color: #ffffff;
   font-family: "Clash Grotesk:Semibold", sans-serif;
-  font-size: 20px;
+  font-size: clamp(20px, 1.85vw, 24px);
   font-weight: 600;
-  line-height: 1.2;
+  line-height: 1.15;
   text-align: center;
   text-overflow: ellipsis;
   white-space: nowrap;
+  transition:
+    color 300ms ease,
+    text-shadow 300ms ease,
+    transform 300ms ease;
+}
+
+/* Resplandor pegado directamente al texto del nombre del ganador */
+.person-card--selected .person-name {
+  color: #fff8e7;
+  text-shadow:
+    0 0 4px rgba(255, 255, 255, 0.95),
+    0 0 10px rgba(255, 225, 61, 0.95),
+    0 0 18px rgba(255, 105, 0, 0.9);
+  animation:
+    winner-name-reveal 620ms cubic-bezier(0.2, 0.9, 0.25, 1.15) forwards,
+    winner-name-glow 1.8s ease-in-out 620ms infinite;
+  overflow: visible;  
+}
+
+@keyframes winner-name-reveal {
+  0% {
+    transform: scale(1);
+  }
+  42% {
+    transform: scale(1.12);
+  }
+  100% {
+    transform: scale(1.03);
+  }
+}
+
+@keyframes winner-name-glow {
+  0%,
+  100% {
+    text-shadow:
+      0 0 4px rgba(255, 255, 255, 0.9),
+      0 0 9px rgba(255, 225, 61, 0.85),
+      0 0 16px rgba(255, 105, 0, 0.8);
+  }
+  50% {
+    text-shadow:
+      0 0 6px rgba(255, 255, 255, 1),
+      0 0 14px rgba(255, 225, 61, 1),
+      0 0 24px rgba(255, 105, 0, 1);
+  }
+}
+
+@keyframes winner-card-pulse {
+  0%,
+  100% {
+    background: rgba(255, 105, 0, 0.18);
+  }
+  50% {
+    background: rgba(255, 105, 0, 0.36);
+  }
 }
 
 .person-details {
   display: flex;
   justify-content: center;
-  gap: 8px;
+  gap: 10px;
+  color: rgba(255, 255, 255, 0.92);
   font-family: "Clash Grotesk:Medium", sans-serif;
   font-size: 14px;
   font-weight: 500;
@@ -288,18 +460,18 @@ button {
 }
 
 .person-details img {
-  width: 16px;
-  height: 16px;
+  width: 15px;
+  height: 15px;
 }
 
 .round-progress {
   display: flex;
   gap: 8px;
-  margin-top: 18px;
+  margin-top: 20px;
 }
 
 .round-progress span {
-  width: 26px;
+  width: 28px;
   height: 4px;
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.35);
@@ -323,7 +495,7 @@ button {
 }
 
 .final-heading {
-  margin-bottom: 18px;
+  margin-bottom: 20px;
   text-align: center;
 }
 
@@ -351,18 +523,24 @@ button {
 .final-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px 16px;
+  gap: 12px 16px;
   width: 100%;
 }
 
 .person-card--compact {
-  height: 66px;
+  height: 82px;
   padding: 8px 12px;
   border-radius: 14px;
 }
 
+.person-card--compact .winner-chip {
+  margin-bottom: 3px;
+  padding: 2px 8px;
+  font-size: 9.5px;
+}
+
 .person-card--compact .person-name {
-  margin-bottom: 4px;
+  margin-bottom: 3px;
   font-size: 16px;
 }
 
@@ -380,11 +558,20 @@ button {
   0% {
     transform: scale(0.96);
   }
-  55% {
-    transform: scale(1.02);
+  50% {
+    transform: scale(1.03);
   }
   100% {
     transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .person-card--rolling .person-slot-track,
+  .person-card--selected,
+  .person-card--selected .person-name,
+  .winner-chip {
+    animation: none;
   }
 }
 
@@ -433,21 +620,22 @@ button {
     grid-template-columns: 1fr;
   }
 
-  .draw-grid--center-last .person-card:last-child {
+  .draw-grid .person-card:last-child {
     grid-column: auto;
     width: 100%;
   }
 
   .person-card {
-    height: 86px;
+    height: 92px;
     padding-inline: 12px;
   }
 
   .person-name {
-    font-size: 17px;
+    font-size: 18px;
   }
 
   .person-details {
+    flex-wrap: wrap;
     gap: 6px;
     font-size: 11px;
   }
@@ -480,24 +668,28 @@ button {
 
   .draw-content,
   .final-content {
-    padding-top: 96px;
-    padding-bottom: 92px;
+    padding-top: 94px;
+    padding-bottom: 90px;
   }
 
   .draw-heading {
     margin-bottom: 14px;
   }
 
+  .draw-grid {
+    gap: 12px 18px;
+  }
+
   .person-card {
-    height: 78px;
+    height: 88px;
   }
 
   .person-card--compact {
-    height: 54px;
+    height: 68px;
   }
 
   .final-heading {
-    margin-bottom: 10px;
+    margin-bottom: 12px;
   }
 
   .final-heading h1 {
@@ -505,6 +697,6 @@ button {
   }
 
   .final-grid {
-    gap: 6px 12px;
+    gap: 8px 12px;
   }
 }

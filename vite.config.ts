@@ -1,15 +1,9 @@
 import { defineConfig, type HtmlTagDescriptor, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
-import tailwindcss from "@tailwindcss/vite";
 import fs from "node:fs";
 import path from "node:path";
 
-let siteConfiguration: any;
-try {
-  siteConfiguration = require("./.figma/make/site.json");
-} catch {
-  siteConfiguration = {};
-}
+import siteConfiguration from "./.figma/make/site.json";
 
 // Vite config — https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
@@ -17,14 +11,13 @@ export default defineConfig(({ mode }) => {
   const emitSourcemaps = mode === "development";
 
   return {
-    base: process.env.FIGMA_PUBLIC_URL ? `${process.env.FIGMA_PUBLIC_URL}/` : "/",
+    base: process.env.FIGMA_PUBLIC_URL ? `${process.env.FIGMA_PUBLIC_URL}/` : "./",
     build: {
       sourcemap: emitSourcemaps ? "inline" : false,
       minify: !emitSourcemaps,
     },
     plugins: [
       react(),
-      tailwindcss(),
       figmaSiteConfiguration(siteConfiguration),
       figmaErrorOverlayReplay(),
       figmaReactRefreshBoundaryFallback(),
@@ -33,7 +26,7 @@ export default defineConfig(({ mode }) => {
     ],
     resolve: {
       alias: {
-        "@": path.resolve(import.meta.dirname, "./src"),
+        "@": path.resolve(__dirname, "./src"),
       },
     },
     server: {
@@ -94,7 +87,7 @@ function figmaSiteConfiguration(config: FigmaSiteConfiguration): Plugin {
   const description = config.description ?? "";
   // Imported HTML keeps its own favicon. New Makes use PNG because Google Search does not
   // support SVG favicons, even though browsers do.
-  const favicon = config.icons?.icon ?? "/favicon.png";
+  const favicon = config.icons?.icon ?? "./favicon.png";
   const socialImage = config.openGraph?.image ?? "";
   const language = sanitizeHtmlValue(config.language) || "en";
   const googleAnalyticsId = sanitizeHtmlValue(config.analytics?.googleAnalyticsId);
@@ -430,12 +423,12 @@ function figmaMakeKitPlugin(options: { storiesGlob: string | string[] }): Plugin
  * path, such as `libraries/<name>/`.
  */
 function figmaLinkedPackageSourcemaps(): Plugin {
-  const packageJson = JSON.parse(fs.readFileSync(path.resolve(import.meta.dirname, "package.json"), "utf8"));
+  const packageJson = JSON.parse(fs.readFileSync(path.resolve(__dirname, "package.json"), "utf8"));
   const linkedPackages = Object.keys({
     ...packageJson.dependencies,
     ...packageJson.devDependencies,
   }).flatMap((name) => {
-    const installedDir = path.resolve(import.meta.dirname, "node_modules", name);
+    const installedDir = path.resolve(__dirname, "node_modules", name);
     try {
       const realDir = fs.realpathSync(installedDir);
       return realDir.split(path.sep).includes("node_modules") ? [] : [{ installedDir, realDir }];
