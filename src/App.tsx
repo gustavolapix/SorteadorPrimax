@@ -621,7 +621,7 @@ export default function App() {
           <h1>
             ¡Bienvenidos a nuestro
             <br />
-            primer sorteo!
+            segundo sorteo!
           </h1>
         </section>
       </PageFrame>
